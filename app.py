@@ -46,6 +46,7 @@ def check_config():
         "DB_USER",
         "DB_PASSWORD",
     ]
+
     missing = [name for name in required if not os.getenv(name)]
 
     if missing:
@@ -137,7 +138,7 @@ extraction_type = st.radio(
     horizontal=True,
 )
 
-# These two options are only relevant for the Collections image-tag flow.
+# Defaults for Code Pull flow. These controls are shown only for Collections/Image Tag flow.
 environment = None
 use_vendor_image = True
 
@@ -273,7 +274,7 @@ if uploaded_file and extraction_type == "Image Tag Extraction":
             use_container_width=True,
             num_rows="fixed",
             column_config={
-                "Select": st.column_config.CheckboxColumn("Select", default=True),
+                "Select": st.column_config.CheckboxColumn("Select", default=True)
             },
         )
 
@@ -337,7 +338,7 @@ else:
         use_container_width=True,
         num_rows="fixed",
         column_config={
-            "retrigger": st.column_config.CheckboxColumn("Retrigger", default=False),
+            "retrigger": st.column_config.CheckboxColumn("Retrigger", default=False)
         },
     )
 
@@ -388,7 +389,7 @@ else:
             build_view,
             use_container_width=True,
             column_config={
-                "Link": st.column_config.LinkColumn("Link", display_text="Open"),
+                "Link": st.column_config.LinkColumn("Link", display_text="Open")
             },
         )
     else:
