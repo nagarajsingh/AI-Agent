@@ -3,11 +3,14 @@ FROM mashrequae.azurecr.io/chatapi-baseimage:v1
 WORKDIR /app
 
 COPY requirements.txt .
-COPY pipeline_mapping.json .
+RUN pip install --no-cache-dir -r requirements.txt
+
 COPY app.py .
 COPY ai_extractor.py .
-
-RUN pip install --no-cache-dir -r requirements.txt
+COPY azure_devops.py .
+COPY database.py .
+COPY pdf_utils.py .
+COPY pipeline_mapping.json .
 
 EXPOSE 8501
 
