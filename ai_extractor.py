@@ -2,6 +2,7 @@ import os
 import json
 from openai import OpenAI
 
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 
@@ -14,48 +15,86 @@ def get_openai_client():
 
 def extract_json_from_ai_response(content):
     content = content.strip()
+
     if content.startswith("```"):
-        content = content.replace("```json", "").replace("```", "").strip()
-    start = content.find("{")
-    end = content.rfind("}")
-    if start == -1 or end == -1:
+        content = content.replace("```json", "")
+        content = content.replace("```", "")
+        content = content.strip()
+
+    json_start = content.find("{")
+    json_end = content.rfind("}")
+
+    if json_start == -1 or json_end == -1:
         raise ValueError("No valid JSON object found in AI response")
-    return json.loads(content[start:end + 1])
+
+    return json.loads(content[json_start:json_end + 1])
 
 
 def ai_extract_services_from_text(document_text):
     client = get_openai_client()
+
     prompt = f"""
-Extract deployment container image details from this release document.
-Return only valid JSON with this shape:
-{{"services":[{{"service_display_name":"","service":"","image_registry":"","image_tag":"","vendorImage":""}}]}}
+You are an AI extraction agent for deployment release documents.
+
+Extract all container image deployment details from the document text.
+
+Return ONLY valid JSON. No markdown. No explanation.
+
+Required JSON format:
+{{
+  "services": [
+    {{
+      "service_display_name": "",
+      "service": "",
+      "image_registry": "",
+      "image_tag": "",
+      "vendorImage": ""
+    }}
+  ]
+}}
+
 Rules:
-- service is the image name only.
-- image_registry is the registry only.
-- image_tag is the tag only.
-- vendorImage must be service:image_tag and must not include registry.
-- If a common version tag exists and image tag is missing, apply the common tag.
-- If no services are found, return {{"services":[]}}.
-Document:
+1. Extract only container images related to deployment/release.
+2. service must be image name only.
+3. image_registry must be registry only.
+4. image_tag must be tag only.
+5. vendorImage must be service:image_tag.
+6. vendorImage must not include registry.
+7. If a common Version Tag is mentioned and images do not show full tag, apply that version tag.
+8. If no services are found, return {{"services": []}}.
+
+Document text:
 {document_text}
 """
+
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         temperature=0,
         messages=[
-            {"role": "system", "content": "Extract structured deployment data from documents."},
-            {"role": "user", "content": prompt},
-        ],
+            {
+                "role": "system",
+                "content": "You extract structured deployment image data from unstructured release documents."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
     )
+
     ai_json = extract_json_from_ai_response(response.choices[0].message.content)
+
     rows = []
     seen = set()
+
     for item in ai_json.get("services", []):
         service = str(item.get("service", "")).strip()
         image_tag = str(item.get("image_tag", "")).strip()
         vendor_image = str(item.get("vendorImage", "")).strip()
+
         if not vendor_image and service and image_tag:
             vendor_image = f"{service}:{image_tag}"
+
         if service and image_tag and vendor_image and vendor_image not in seen:
             seen.add(vendor_image)
             rows.append({
@@ -63,35 +102,89 @@ Document:
                 "Service": service,
                 "Image Tag": image_tag,
                 "vendorImage": vendor_image,
-                "Extraction Method": "AI-Agent",
+                "Extraction Method": "AI-Agent"
             })
+
     return rows
 
 
 def ai_extract_code_pull_details(document_text):
     client = get_openai_client()
+
     prompt = f"""
-Extract code-pull pipeline details from this release document.
-Return only valid JSON with this shape:
-{{"application_name":"","project_name":"","release_version":"","source_branch":"","azure_commit_id":"","target_environment":"","change_type":"","confidence":"","notes":[]}}
+You are an AI extraction agent for bank release documents.
+
+Extract details required to trigger a code-pull pipeline.
+
+Return ONLY valid JSON. No markdown. No explanation.
+
+Required JSON format:
+{{
+  "application_name": "",
+  "project_name": "",
+  "release_version": "",
+  "source_branch": "",
+  "azure_commit_id": "",
+  "target_environment": "",
+  "change_type": "",
+  "confidence": "",
+  "notes": []
+}}
+
 Rules:
-- application_name should come from deployment service/application information.
-- project_name should come from project details.
-- release_version should come from document version or release version.
-- source_branch should come from deployment steps or sync instructions.
-- azure_commit_id should be a 40-character commit SHA if present.
-- target_environment should be deployment target environment if present.
-- confidence is high, medium, or low.
-- notes should list missing or inferred fields.
-Document:
+1. application_name:
+   - Prefer Deployment Information > Services.
+   - Example: OBP.
+
+2. project_name:
+   - Prefer Project Details > Project Name.
+   - Example: Oracle Banking Payment.
+
+3. release_version:
+   - Prefer document Version or Release version.
+   - Example: 5.12.60.
+
+4. source_branch:
+   - Extract branch from deployment steps.
+   - Example sentence:
+     DevOps Team will sync the OBP_Kernel_Hotfix_T24_USUKHK from the Profinch to Mashreq Env.
+   - source_branch = OBP_Kernel_Hotfix_T24_USUKHK.
+
+5. azure_commit_id:
+   - Extract 40-character commit SHA if present.
+
+6. target_environment:
+   - Extract deployment target environment.
+   - Example: T24-UAT.
+
+7. change_type:
+   - Extract values like KERNEL, UI, DB, CONFIG if available.
+
+8. confidence:
+   - high if application_name and source_branch are clearly found.
+   - medium if one value is inferred.
+   - low if important values are missing.
+
+9. notes:
+   - Mention missing or inferred fields.
+
+Document text:
 {document_text}
 """
+
     response = client.chat.completions.create(
         model=OPENAI_MODEL,
         temperature=0,
         messages=[
-            {"role": "system", "content": "Extract code-pull pipeline parameters from release documents."},
-            {"role": "user", "content": prompt},
-        ],
+            {
+                "role": "system",
+                "content": "You extract code-pull pipeline parameters from release documents."
+            },
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ]
     )
+
     return extract_json_from_ai_response(response.choices[0].message.content)
